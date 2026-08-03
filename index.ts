@@ -28,6 +28,27 @@ app.post('/api/insumos', async (req: Request, res: Response) => {
   } catch (error) {
     res.status(500).json({ error: 'Error al registrar insumo' });
   }
+app.delete('/api/insumos/:id', async (req: Request, res: Response) => {
+  try {
+    await prisma.insumo.delete({ where: { id: Number(req.params.id) } });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al eliminar insumo' });
+  }
+});
+
+app.put('/api/insumos/:id', async (req: Request, res: Response) => {
+  const { nombre, unidadMedida, cantidadActual, costoCompra, costoUnitario } = req.body;
+  try {
+    const actualizado = await prisma.insumo.update({
+      where: { id: Number(req.params.id) },
+      data: { nombre, unidadMedida, cantidadActual: Number(cantidadActual), costoCompra: Number(costoCompra), costoUnitario: Number(costoUnitario) }
+    });
+    res.json(actualizado);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al actualizar insumo' });
+  }
+});
 });
 
 app.get('/api/productos', async (req: Request, res: Response) => {
