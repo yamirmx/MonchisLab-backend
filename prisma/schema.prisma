@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Insumo {
+  id             Int           @id @default(autoincrement())
+  nombre         String
+  unidadMedida   String
+  cantidadActual Float
+  costoCompra    Float
+  costoUnitario  Float
+  ingredientes   Ingrediente[]
+}
+
+model Producto {
+  id           Int           @id @default(autoincrement())
+  nombre       String
+  categoria    String
+  precioVenta  Float
+  activo       Boolean       @default(true)
+  ingredientes Ingrediente[]
+  detalles     DetalleVenta[]
+}
+
+model Ingrediente {
+  id         Int      @id @default(autoincrement())
+  productoId Int
+  insumoId   Int
+  cantidad   Float
+  producto   Producto @relation(fields: [productoId], references: [id])
+  insumo     Insumo   @relation(fields: [insumoId], references: [id])
+}
+
+model Venta {
+  id        Int            @id @default(autoincrement())
+  cliente   String
+  tipo      String
+  total     Float
+  fecha     DateTime       @default(now())
+  detalles  DetalleVenta[]
+}
+
+model DetalleVenta {
+  id             Int      @id @default(autoincrement())
+  ventaId        Int
+  productoId     Int?
+  nombre         String
+  cantidad       Float
+  precioUnitario Float
+  subtotal       Float
+  venta          Venta    @relation(fields: [ventaId], references: [id])
+  producto       Producto? @relation(fields: [productoId], references: [id])
+}
