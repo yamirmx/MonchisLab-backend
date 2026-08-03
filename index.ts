@@ -9,6 +9,7 @@ const app = express();
 app.use(cors()); 
 app.use(express.json());
 
+// --- INSUMOS: OBTENER ---
 app.get('/api/insumos', async (req: Request, res: Response) => {
   try {
     const insumos = await prisma.insumo.findMany();
@@ -18,6 +19,7 @@ app.get('/api/insumos', async (req: Request, res: Response) => {
   }
 });
 
+// --- INSUMOS: CREAR ---
 app.post('/api/insumos', async (req: Request, res: Response) => {
   const { nombre, unidadMedida, cantidadActual, costoCompra, costoUnitario } = req.body;
   try {
@@ -28,6 +30,9 @@ app.post('/api/insumos', async (req: Request, res: Response) => {
   } catch (error) {
     res.status(500).json({ error: 'Error al registrar insumo' });
   }
+});
+
+// --- INSUMOS: ELIMINAR ---
 app.delete('/api/insumos/:id', async (req: Request, res: Response) => {
   try {
     await prisma.insumo.delete({ where: { id: Number(req.params.id) } });
@@ -37,6 +42,7 @@ app.delete('/api/insumos/:id', async (req: Request, res: Response) => {
   }
 });
 
+// --- INSUMOS: ACTUALIZAR ---
 app.put('/api/insumos/:id', async (req: Request, res: Response) => {
   const { nombre, unidadMedida, cantidadActual, costoCompra, costoUnitario } = req.body;
   try {
@@ -49,8 +55,8 @@ app.put('/api/insumos/:id', async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Error al actualizar insumo' });
   }
 });
-});
 
+// --- PRODUCTOS: OBTENER ---
 app.get('/api/productos', async (req: Request, res: Response) => {
   try {
     const productos = await prisma.producto.findMany({
@@ -63,6 +69,7 @@ app.get('/api/productos', async (req: Request, res: Response) => {
   }
 });
 
+// --- PRODUCTOS: CREAR ---
 app.post('/api/productos', async (req: Request, res: Response) => {
   const { nombre, categoria, precioVenta, ingredientes } = req.body;
   try {
@@ -79,6 +86,7 @@ app.post('/api/productos', async (req: Request, res: Response) => {
   }
 });
 
+// --- VENTAS: COBRAR ---
 app.post('/api/ventas', async (req: Request, res: Response) => {
   const { cliente, tipo, total, detalles } = req.body;
   try {
