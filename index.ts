@@ -86,6 +86,32 @@ app.post('/api/productos', async (req: Request, res: Response) => {
   }
 });
 
+// --- PRODUCTOS: ACTUALIZAR (¡NUEVO!) ---
+app.put('/api/productos/:id', async (req: Request, res: Response) => {
+  const { nombre, categoria, precioVenta, ingredientes } = req.body;
+  try {
+    const actualizado = await prisma.producto.update({
+      where: { id: Number(req.params.id) },
+      data: {
+        nombre,
+        categoria,
+        precioVenta: Number(precioVenta),
+        ingredientes: {
+          deleteMany: {}, // Borramos la receta vieja
+          create: ingredientes.map((ing: any) => ({
+            insumoId: Number(ing.insumoId),
+            cantidad: Number(ing.cantidad)
+          })) // Insertamos la receta corregida
+        }
+      },
+      include: { ingredientes: true }
+    });
+    res.json(actualizado);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al actualizar el producto' });
+  }
+});
+
 // --- VENTAS: COBRAR ---
 app.post('/api/ventas', async (req: Request, res: Response) => {
   const { cliente, tipo, total, detalles } = req.body;
