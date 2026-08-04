@@ -116,22 +116,11 @@ app.put('/api/productos/:id', async (req: Request, res: Response) => {
 app.delete('/api/productos/:id', async (req: Request, res: Response) => {
   try {
     const idProducto = Number(req.params.id);
-
-    // 1. Primero vaciamos la receta (borramos los ingredientes ligados al producto automáticamente)
     await prisma.producto.update({
       where: { id: idProducto },
-      data: {
-        ingredientes: {
-          deleteMany: {} // El sistema hace el trabajo sucio por ti
-        }
-      }
+      data: { ingredientes: { deleteMany: {} } }
     });
-
-    // 2. Ahora sí, con el camino libre, borramos el producto por completo de la base de datos
-    await prisma.producto.delete({ 
-      where: { id: idProducto } 
-    });
-
+    await prisma.producto.delete({ where: { id: idProducto } });
     res.json({ success: true });
   } catch (error) {
     console.error("Error al eliminar producto:", error);
@@ -140,14 +129,14 @@ app.delete('/api/productos/:id', async (req: Request, res: Response) => {
 });
 
 // ==============================================================
-// MÓDULO DE VENTAS (NUEVO)
+// MÓDULO DE VENTAS
 // ==============================================================
 
-// --- VENTAS: OBTENER HISTORIAL (Para tu nueva tabla) ---
+// --- VENTAS: OBTENER HISTORIAL ---
 app.get('/api/ventas', async (req: Request, res: Response) => {
   try {
     const ventas = await prisma.venta.findMany({
-      orderBy: { id: 'desc' }, // Trae las ventas más recientes primero
+      orderBy: { id: 'desc' },
       include: { detalles: true }
     });
     res.json(ventas);
@@ -156,11 +145,31 @@ app.get('/api/ventas', async (req: Request, res: Response) => {
   }
 });
 
+// --- VENTAS: ELIMINAR (Borrar tickets de prueba) ---
+app.delete('/api/ventas/:id', async (req: Request, res: Response) => {
+  try {
+    const idVenta = Number(req.params.id);
+    
+    // Primero borramos los detalles del ticket para que no queden huérfanos
+    await prisma.venta.update({
+      where: { id: idVenta },
+      data: { detalles: { deleteMany: {} } }
+    });
+
+    // Luego borramos el ticket principal
+    await prisma.venta.delete({ where: { id: idVenta } });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error al eliminar venta:", error);
+    res.status(500).json({ error: 'Error interno al intentar borrar la venta' });
+  }
+});
+
 // --- VENTAS: COBRAR Y DESCONTAR INVENTARIO AUTOMÁTICO ---
 app.post('/api/ventas', async (req: Request, res: Response) => {
   const { cliente, tipo, total, detalles } = req.body;
   try {
-    // 1. Guardar la venta y generar el ticket
     const nuevaVenta = await prisma.venta.create({
       data: {
         cliente, tipo, total: Number(total),
@@ -174,9 +183,8 @@ app.post('/api/ventas', async (req: Request, res: Response) => {
       include: { detalles: true }
     });
 
-    // 2. Magia: Descontar ingredientes de la bodega
     for (const detalle of detalles) {
-      if (detalle.productoId) { // Solo si es un platillo de tu menú (ignora entradas manuales)
+      if (detalle.productoId) { 
         const producto = await prisma.producto.findUnique({
           where: { id: Number(detalle.productoId) },
           include: { ingredientes: true }
@@ -184,17 +192,10 @@ app.post('/api/ventas', async (req: Request, res: Response) => {
 
         if (producto && producto.ingredientes) {
           for (const ingrediente of producto.ingredientes) {
-            // Multiplica la receta por la cantidad de hamburguesas vendidas
             const cantidadGramosUsados = ingrediente.cantidad * Number(detalle.cantidad);
-
-            // Resta el total directamente del insumo
             await prisma.insumo.update({
               where: { id: ingrediente.insumoId },
-              data: {
-                cantidadActual: {
-                  decrement: cantidadGramosUsados
-                }
-              }
+              data: { cantidadActual: { decrement: cantidadGramosUsados } }
             });
           }
         }
