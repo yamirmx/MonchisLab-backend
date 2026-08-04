@@ -112,6 +112,33 @@ app.put('/api/productos/:id', async (req: Request, res: Response) => {
   }
 });
 
+// --- PRODUCTOS: ELIMINAR (Borrado Físico Completo en Cascada) ---
+app.delete('/api/productos/:id', async (req: Request, res: Response) => {
+  try {
+    const idProducto = Number(req.params.id);
+
+    // 1. Primero vaciamos la receta (borramos los ingredientes ligados al producto automáticamente)
+    await prisma.producto.update({
+      where: { id: idProducto },
+      data: {
+        ingredientes: {
+          deleteMany: {} // El sistema hace el trabajo sucio por ti
+        }
+      }
+    });
+
+    // 2. Ahora sí, con el camino libre, borramos el producto por completo de la base de datos
+    await prisma.producto.delete({ 
+      where: { id: idProducto } 
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error al eliminar producto:", error);
+    res.status(500).json({ error: 'Error al eliminar el producto' });
+  }
+});
+
 // ==============================================================
 // MÓDULO DE VENTAS (NUEVO)
 // ==============================================================
