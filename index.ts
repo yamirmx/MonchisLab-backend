@@ -145,7 +145,7 @@ app.get('/api/ventas', async (req: Request, res: Response) => {
   }
 });
 
-// --- VENTAS: ELIMINAR (Borrar tickets de prueba) ---
+// --- VENTAS: ELIMINAR (Borrar tickets individuales) ---
 app.delete('/api/ventas/:id', async (req: Request, res: Response) => {
   try {
     const idVenta = Number(req.params.id);
@@ -163,6 +163,25 @@ app.delete('/api/ventas/:id', async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error al eliminar venta:", error);
     res.status(500).json({ error: 'Error interno al intentar borrar la venta' });
+  }
+});
+
+// --- VENTAS: LIMPIEZA TOTAL (Hard Reset para pruebas) ---
+app.delete('/api/sistema/reset-ventas', async (req: Request, res: Response) => {
+  try {
+    // 1. Borramos todos los detalles y luego todas las ventas
+    await prisma.venta.updateMany({ data: { detalles: { deleteMany: {} } } });
+    await prisma.$executeRawUnsafe('DELETE FROM "DetalleVenta"');
+    await prisma.$executeRawUnsafe('DELETE FROM "Venta"');
+    
+    // 2. Reiniciamos el contador a 1 (Intenta formato PostgreSQL y SQLite)
+    try { await prisma.$executeRawUnsafe('TRUNCATE TABLE "Venta" RESTART IDENTITY CASCADE;'); } catch(e) {}
+    try { await prisma.$executeRawUnsafe('DELETE FROM sqlite_sequence WHERE name="Venta";'); } catch(e) {}
+
+    res.json({ success: true, message: "Sistema limpio. El próximo ticket será el #1" });
+  } catch (error) {
+    console.error("Error en hard reset:", error);
+    res.status(500).json({ error: 'Error al limpiar el sistema' });
   }
 });
 
