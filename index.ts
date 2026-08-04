@@ -86,7 +86,7 @@ app.post('/api/productos', async (req: Request, res: Response) => {
   }
 });
 
-// --- PRODUCTOS: ACTUALIZAR (¡NUEVO!) ---
+// --- PRODUCTOS: ACTUALIZAR ---
 app.put('/api/productos/:id', async (req: Request, res: Response) => {
   const { nombre, categoria, precioVenta, ingredientes } = req.body;
   try {
@@ -97,11 +97,11 @@ app.put('/api/productos/:id', async (req: Request, res: Response) => {
         categoria,
         precioVenta: Number(precioVenta),
         ingredientes: {
-          deleteMany: {}, // Borramos la receta vieja
+          deleteMany: {}, 
           create: ingredientes.map((ing: any) => ({
             insumoId: Number(ing.insumoId),
             cantidad: Number(ing.cantidad)
-          })) // Insertamos la receta corregida
+          })) 
         }
       },
       include: { ingredientes: true }
@@ -112,10 +112,28 @@ app.put('/api/productos/:id', async (req: Request, res: Response) => {
   }
 });
 
-// --- VENTAS: COBRAR ---
+// ==============================================================
+// MÓDULO DE VENTAS (NUEVO)
+// ==============================================================
+
+// --- VENTAS: OBTENER HISTORIAL (Para tu nueva tabla) ---
+app.get('/api/ventas', async (req: Request, res: Response) => {
+  try {
+    const ventas = await prisma.venta.findMany({
+      orderBy: { id: 'desc' }, // Trae las ventas más recientes primero
+      include: { detalles: true }
+    });
+    res.json(ventas);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al cargar el historial de ventas' });
+  }
+});
+
+// --- VENTAS: COBRAR Y DESCONTAR INVENTARIO AUTOMÁTICO ---
 app.post('/api/ventas', async (req: Request, res: Response) => {
   const { cliente, tipo, total, detalles } = req.body;
   try {
+    // 1. Guardar la venta y generar el ticket
     const nuevaVenta = await prisma.venta.create({
       data: {
         cliente, tipo, total: Number(total),
@@ -128,9 +146,38 @@ app.post('/api/ventas', async (req: Request, res: Response) => {
       },
       include: { detalles: true }
     });
+
+    // 2. Magia: Descontar ingredientes de la bodega
+    for (const detalle of detalles) {
+      if (detalle.productoId) { // Solo si es un platillo de tu menú (ignora entradas manuales)
+        const producto = await prisma.producto.findUnique({
+          where: { id: Number(detalle.productoId) },
+          include: { ingredientes: true }
+        });
+
+        if (producto && producto.ingredientes) {
+          for (const ingrediente of producto.ingredientes) {
+            // Multiplica la receta por la cantidad de hamburguesas vendidas
+            const cantidadGramosUsados = ingrediente.cantidad * Number(detalle.cantidad);
+
+            // Resta el total directamente del insumo
+            await prisma.insumo.update({
+              where: { id: ingrediente.insumoId },
+              data: {
+                cantidadActual: {
+                  decrement: cantidadGramosUsados
+                }
+              }
+            });
+          }
+        }
+      }
+    }
+
     res.json(nuevaVenta);
   } catch (error) {
-    res.status(500).json({ error: 'Error al cobrar la orden' });
+    console.error("Error al cobrar la orden:", error);
+    res.status(500).json({ error: 'Error interno al procesar la venta y el inventario' });
   }
 });
 
