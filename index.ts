@@ -150,13 +150,11 @@ app.delete('/api/ventas/:id', async (req: Request, res: Response) => {
   try {
     const idVenta = Number(req.params.id);
     
-    // Primero borramos los detalles del ticket para que no queden huérfanos
     await prisma.venta.update({
       where: { id: idVenta },
       data: { detalles: { deleteMany: {} } }
     });
 
-    // Luego borramos el ticket principal
     await prisma.venta.delete({ where: { id: idVenta } });
 
     res.json({ success: true });
@@ -169,19 +167,32 @@ app.delete('/api/ventas/:id', async (req: Request, res: Response) => {
 // --- VENTAS: LIMPIEZA TOTAL (Hard Reset para pruebas) ---
 app.delete('/api/sistema/reset-ventas', async (req: Request, res: Response) => {
   try {
-    // 1. Borramos todos los detalles y luego todas las ventas
-    await prisma.venta.updateMany({ data: { detalles: { deleteMany: {} } } });
-    await prisma.$executeRawUnsafe('DELETE FROM "DetalleVenta"');
-    await prisma.$executeRawUnsafe('DELETE FROM "Venta"');
+    const todasLasVentas = await prisma.venta.findMany();
     
-    // 2. Reiniciamos el contador a 1 (Intenta formato PostgreSQL y SQLite)
-    try { await prisma.$executeRawUnsafe('TRUNCATE TABLE "Venta" RESTART IDENTITY CASCADE;'); } catch(e) {}
-    try { await prisma.$executeRawUnsafe('DELETE FROM sqlite_sequence WHERE name="Venta";'); } catch(e) {}
+    for (const venta of todasLasVentas) {
+      await prisma.venta.update({
+        where: { id: venta.id },
+        data: { detalles: { deleteMany: {} } }
+      });
+      await prisma.venta.delete({ where: { id: venta.id } });
+    }
+    
+    try { 
+      await prisma.$executeRawUnsafe('TRUNCATE TABLE "Venta" RESTART IDENTITY CASCADE;'); 
+    } catch(e) {
+      console.log("Aviso: No se pudo forzar el reinicio del contador en Postgres.");
+    }
 
-    res.json({ success: true, message: "Sistema limpio. El próximo ticket será el #1" });
-  } catch (error) {
+    try { 
+      await prisma.$executeRawUnsafe('DELETE FROM sqlite_sequence WHERE name="Venta";'); 
+    } catch(e) {
+      console.log("Aviso: No se pudo forzar el reinicio del contador en SQLite.");
+    }
+
+    res.json({ success: true, message: "Sistema limpio." });
+  } catch (error: any) {
     console.error("Error en hard reset:", error);
-    res.status(500).json({ error: 'Error al limpiar el sistema' });
+    res.status(500).json({ error: error.message || 'Error al limpiar el sistema' });
   }
 });
 
