@@ -8,21 +8,24 @@ datasource db {
 }
 
 model Insumo {
-  id             Int           @id @default(autoincrement())
+  id             Int      @id @default(autoincrement())
   nombre         String
   unidadMedida   String
   cantidadActual Float
   costoCompra    Float
   costoUnitario  Float
+  
   ingredientes   Ingrediente[]
+  compras        DetalleCompraProveedor[] // NUEVO: Enlace al historial de compras
 }
 
 model Producto {
-  id           Int           @id @default(autoincrement())
+  id           Int            @id @default(autoincrement())
   nombre       String
   categoria    String
   precioVenta  Float
-  activo       Boolean       @default(true)
+  activo       Boolean        @default(true)
+  
   ingredientes Ingrediente[]
   detalles     DetalleVenta[]
 }
@@ -32,27 +35,75 @@ model Ingrediente {
   productoId Int
   insumoId   Int
   cantidad   Float
+  
   producto   Producto @relation(fields: [productoId], references: [id])
   insumo     Insumo   @relation(fields: [insumoId], references: [id])
 }
 
 model Venta {
-  id        Int            @id @default(autoincrement())
-  cliente   String
-  tipo      String
-  total     Float
-  fecha     DateTime       @default(now())
-  detalles  DetalleVenta[]
+  id       Int            @id @default(autoincrement())
+  cliente  String
+  tipo     String
+  total    Float
+  fecha    DateTime       @default(now())
+  
+  detalles DetalleVenta[]
 }
 
 model DetalleVenta {
-  id             Int      @id @default(autoincrement())
+  id             Int       @id @default(autoincrement())
   ventaId        Int
   productoId     Int?
   nombre         String
   cantidad       Float
   precioUnitario Float
   subtotal       Float
-  venta          Venta    @relation(fields: [ventaId], references: [id])
+  
+  venta          Venta     @relation(fields: [ventaId], references: [id])
   producto       Producto? @relation(fields: [productoId], references: [id])
+}
+
+// ==============================
+// NUEVO: MÓDULO DE PROVEEDORES
+// ==============================
+
+model Proveedor {
+  id                  Int      @id @default(autoincrement())
+  nombreEmpresa       String
+  nombreRepresentante String?
+  telefono            String?
+  email               String?
+  comprasTotales      Int      @default(0)
+  ultimaCompra        DateTime?
+  activo              Boolean  @default(true)
+  createdAt           DateTime @default(now())
+
+  historialCompras    CompraProveedor[]
+}
+
+model CompraProveedor {
+  id             Int      @id @default(autoincrement())
+  proveedorId    Int
+  folioFiscal    String?  
+  notas          String?
+  subtotal       Float    @default(0)
+  descuento      Float    @default(0)
+  totalAPagar    Float
+  fechaCompra    DateTime @default(now())
+  
+  proveedor      Proveedor @relation(fields: [proveedorId], references: [id])
+  detalles       DetalleCompraProveedor[]
+}
+
+model DetalleCompraProveedor {
+  id             Int      @id @default(autoincrement())
+  compraId       Int
+  insumoId       Int
+  cantidad       Float    
+  unidadCompra   String   
+  costoNeto      Float    
+  precioUnitario Float    
+
+  compra         CompraProveedor @relation(fields: [compraId], references: [id])
+  insumo         Insumo          @relation(fields: [insumoId], references: [id])
 }
