@@ -239,5 +239,110 @@ app.post('/api/ventas', async (req: Request, res: Response) => {
   }
 });
 
+// ==============================================================
+// NUEVO: MÓDULO DE PROVEEDORES Y COMPRAS
+// ==============================================================
+
+// --- PROVEEDORES: OBTENER TODOS ---
+app.get('/api/proveedores', async (req: Request, res: Response) => {
+  try {
+    const proveedores = await prisma.proveedor.findMany({
+      where: { activo: true },
+      orderBy: { id: 'desc' }
+    });
+    res.json(proveedores);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al cargar proveedores' });
+  }
+});
+
+// --- PROVEEDORES: CREAR ---
+app.post('/api/proveedores', async (req: Request, res: Response) => {
+  const { nombreEmpresa, nombreRepresentante, telefono, email } = req.body;
+  try {
+    const nuevoProveedor = await prisma.proveedor.create({
+      data: { 
+        nombreEmpresa, 
+        nombreRepresentante: nombreRepresentante || null, 
+        telefono: telefono || null, 
+        email: email || null 
+      }
+    });
+    res.json(nuevoProveedor);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al crear proveedor' });
+  }
+});
+
+// --- PROVEEDORES: ELIMINAR (Soft Delete) ---
+app.delete('/api/proveedores/:id', async (req: Request, res: Response) => {
+  try {
+    await prisma.proveedor.update({
+      where: { id: Number(req.params.id) },
+      data: { activo: false } 
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al eliminar proveedor' });
+  }
+});
+
+// --- COMPRAS A PROVEEDORES: REGISTRAR NUEVA COMPRA ---
+app.post('/api/compras-proveedores', async (req: Request, res: Response) => {
+  const { proveedorId, folioFiscal, notas, subtotal, descuento, totalAPagar, detalles } = req.body;
+  try {
+    const nuevaCompra = await prisma.compraProveedor.create({
+      data: {
+        proveedorId: Number(proveedorId),
+        folioFiscal,
+        notas,
+        subtotal: Number(subtotal),
+        descuento: Number(descuento),
+        totalAPagar: Number(totalAPagar),
+        detalles: {
+          create: detalles.map((d: any) => ({
+            insumoId: Number(d.insumoId),
+            cantidad: Number(d.cantidad),
+            unidadCompra: d.unidadCompra,
+            costoNeto: Number(d.costoNeto),
+            precioUnitario: Number(d.precioUnitario)
+          }))
+        }
+      }
+    });
+
+    await prisma.proveedor.update({
+      where: { id: Number(proveedorId) },
+      data: {
+        comprasTotales: { increment: 1 },
+        ultimaCompra: new Date()
+      }
+    });
+
+    for (const detalle of detalles) {
+      if (detalle.insumoId) {
+        const insumoActual = await prisma.insumo.findUnique({ where: { id: Number(detalle.insumoId) } });
+        
+        if (insumoActual) {
+          let cantidadASumar = Number(detalle.cantidad);
+          if (detalle.unidadCompra === 'Kilos' || detalle.unidadCompra === 'Litros') {
+            cantidadASumar = cantidadASumar * 1000;
+          }
+
+          await prisma.insumo.update({
+            where: { id: Number(detalle.insumoId) },
+            data: { cantidadActual: { increment: cantidadASumar } }
+          });
+        }
+      }
+    }
+
+    res.json(nuevaCompra);
+  } catch (error) {
+    console.error("Error al registrar la compra:", error);
+    res.status(500).json({ error: 'Error interno al registrar la orden de compra.' });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`🚀 Backend de Monchis Lab corriendo en el puerto ${PORT}`));
