@@ -32,13 +32,22 @@ app.post('/api/insumos', async (req: Request, res: Response) => {
   }
 });
 
-// --- INSUMOS: ELIMINAR ---
+// --- INSUMOS: ELIMINAR (CORREGIDO: BORRADO EN CASCADA) ---
 app.delete('/api/insumos/:id', async (req: Request, res: Response) => {
   try {
-    await prisma.insumo.delete({ where: { id: Number(req.params.id) } });
+    const insumoId = Number(req.params.id);
+    
+    // 1. Eliminar dependencias primero para evitar error de llave foránea
+    await prisma.ingrediente.deleteMany({ where: { insumoId } });
+    await prisma.detalleCompraProveedor.deleteMany({ where: { insumoId } });
+    
+    // 2. Eliminar el insumo
+    await prisma.insumo.delete({ where: { id: insumoId } });
+    
     res.json({ success: true });
   } catch (error) {
-    res.status(500).json({ error: 'Error al eliminar insumo' });
+    console.error("Error al eliminar insumo:", error);
+    res.status(500).json({ error: 'Error al eliminar el insumo. Verifique la conexión.' });
   }
 });
 
@@ -132,7 +141,6 @@ app.delete('/api/productos/:id', async (req: Request, res: Response) => {
 // MÓDULO DE VENTAS
 // ==============================================================
 
-// --- VENTAS: OBTENER HISTORIAL ---
 app.get('/api/ventas', async (req: Request, res: Response) => {
   try {
     const ventas = await prisma.venta.findMany({
@@ -145,7 +153,6 @@ app.get('/api/ventas', async (req: Request, res: Response) => {
   }
 });
 
-// --- VENTAS: ELIMINAR (Borrar tickets individuales) ---
 app.delete('/api/ventas/:id', async (req: Request, res: Response) => {
   try {
     const idVenta = Number(req.params.id);
@@ -164,7 +171,6 @@ app.delete('/api/ventas/:id', async (req: Request, res: Response) => {
   }
 });
 
-// --- VENTAS: LIMPIEZA TOTAL (Hard Reset para pruebas) ---
 app.delete('/api/sistema/reset-ventas', async (req: Request, res: Response) => {
   try {
     const todasLasVentas = await prisma.venta.findMany();
@@ -196,7 +202,6 @@ app.delete('/api/sistema/reset-ventas', async (req: Request, res: Response) => {
   }
 });
 
-// --- VENTAS: COBRAR Y DESCONTAR INVENTARIO AUTOMÁTICO ---
 app.post('/api/ventas', async (req: Request, res: Response) => {
   const { cliente, tipo, total, detalles } = req.body;
   try {
@@ -243,7 +248,6 @@ app.post('/api/ventas', async (req: Request, res: Response) => {
 // NUEVO: MÓDULO DE PROVEEDORES Y COMPRAS
 // ==============================================================
 
-// --- PROVEEDORES: OBTENER TODOS ---
 app.get('/api/proveedores', async (req: Request, res: Response) => {
   try {
     const proveedores = await prisma.proveedor.findMany({
@@ -256,7 +260,6 @@ app.get('/api/proveedores', async (req: Request, res: Response) => {
   }
 });
 
-// --- PROVEEDORES: CREAR ---
 app.post('/api/proveedores', async (req: Request, res: Response) => {
   const { nombreEmpresa, nombreRepresentante, telefono, email } = req.body;
   try {
@@ -274,7 +277,6 @@ app.post('/api/proveedores', async (req: Request, res: Response) => {
   }
 });
 
-// --- PROVEEDORES: ELIMINAR (Soft Delete) ---
 app.delete('/api/proveedores/:id', async (req: Request, res: Response) => {
   try {
     await prisma.proveedor.update({
@@ -287,7 +289,6 @@ app.delete('/api/proveedores/:id', async (req: Request, res: Response) => {
   }
 });
 
-// --- COMPRAS A PROVEEDORES: REGISTRAR NUEVA COMPRA ---
 app.post('/api/compras-proveedores', async (req: Request, res: Response) => {
   const { proveedorId, folioFiscal, notas, subtotal, descuento, totalAPagar, detalles } = req.body;
   try {
@@ -324,15 +325,14 @@ app.post('/api/compras-proveedores', async (req: Request, res: Response) => {
         const insumoActual = await prisma.insumo.findUnique({ where: { id: Number(detalle.insumoId) } });
         
         if (insumoActual) {
-          // CORRECCIÓN APLICADA: Ya no se multiplica por 1000
           let cantidadASumar = Number(detalle.cantidad);
 
           await prisma.insumo.update({
             where: { id: Number(detalle.insumoId) },
             data: { 
               cantidadActual: { increment: cantidadASumar },
-              costoCompra: Number(detalle.costoNeto), // Actualizamos el último costo pagado
-              costoUnitario: Number(detalle.precioUnitario) // Actualizamos el costo unitario
+              costoCompra: Number(detalle.costoNeto), 
+              costoUnitario: Number(detalle.precioUnitario) 
             }
           });
         }
