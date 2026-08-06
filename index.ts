@@ -324,14 +324,16 @@ app.post('/api/compras-proveedores', async (req: Request, res: Response) => {
         const insumoActual = await prisma.insumo.findUnique({ where: { id: Number(detalle.insumoId) } });
         
         if (insumoActual) {
+          // CORRECCIÓN APLICADA: Ya no se multiplica por 1000
           let cantidadASumar = Number(detalle.cantidad);
-          if (detalle.unidadCompra === 'Kilos' || detalle.unidadCompra === 'Litros') {
-            cantidadASumar = cantidadASumar * 1000;
-          }
 
           await prisma.insumo.update({
             where: { id: Number(detalle.insumoId) },
-            data: { cantidadActual: { increment: cantidadASumar } }
+            data: { 
+              cantidadActual: { increment: cantidadASumar },
+              costoCompra: Number(detalle.costoNeto), // Actualizamos el último costo pagado
+              costoUnitario: Number(detalle.precioUnitario) // Actualizamos el costo unitario
+            }
           });
         }
       }
