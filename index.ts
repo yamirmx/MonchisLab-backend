@@ -223,27 +223,42 @@ app.post('/api/ventas', async (req: Request, res: Response) => {
       if (detalle.productoId) { 
         const producto = await prisma.producto.findUnique({
           where: { id: Number(detalle.productoId) },
-          include: { ingredientes: { include: { insumo: true } } } // INCLUÍMOS EL INSUMO PARA LEER SU UNIDAD DE MEDIDA
+          include: { ingredientes: { include: { insumo: true } } } 
         });
 
         if (producto && producto.ingredientes) {
           for (const ingrediente of producto.ingredientes) {
             
-            // Cantidad bruta que pide la receta (ej. 150 gramos x 2 hamburguesas = 300)
+            // 1. Calculamos la cantidad bruta que pide la receta
             let cantidadADescontar = ingrediente.cantidad * Number(detalle.cantidad);
 
-            // CORRECCIÓN: CONVERSIÓN DE INVENTARIO
-            // Si el insumo está guardado en "Kilos" o "Litros", convertimos los gramos/mililitros a Kilos/Litros
+            // 2. Si el insumo está guardado en "Kilos" o "Litros", dividimos entre 1000
             if (ingrediente.insumo) {
                 if (ingrediente.insumo.unidadMedida === 'Kilos' || ingrediente.insumo.unidadMedida === 'Litros') {
                     cantidadADescontar = cantidadADescontar / 1000;
+                    // 3. Forzamos precisión a 3 decimales para evitar el error de coma flotante (ej. 2.999999999999999 -> 3)
+                    cantidadADescontar = Math.round(cantidadADescontar * 1000) / 1000;
                 }
             }
 
-            await prisma.insumo.update({
-              where: { id: ingrediente.insumoId },
-              data: { cantidadActual: { decrement: cantidadADescontar } }
+            // 4. Actualizamos el insumo en base de datos.
+            // Para asegurar la precisión final en la base de datos, usamos un enfoque en dos pasos.
+            // En lugar de usar decrement (que puede generar coma flotante en SQLite/Postgres internamente),
+            // calculamos el nuevo valor exacto antes de guardarlo.
+            const insumoActual = await prisma.insumo.findUnique({
+                where: { id: ingrediente.insumoId }
             });
+
+            if(insumoActual) {
+                let nuevoStock = Number(insumoActual.cantidadActual) - cantidadADescontar;
+                // Redondeamos el stock resultante a 3 decimales máximos para mantener la integridad visual y matemática de la bodega.
+                nuevoStock = Math.round(nuevoStock * 1000) / 1000;
+
+                await prisma.insumo.update({
+                  where: { id: ingrediente.insumoId },
+                  data: { cantidadActual: nuevoStock }
+                });
+            }
           }
         }
       }
@@ -338,11 +353,15 @@ app.post('/api/compras-proveedores', async (req: Request, res: Response) => {
         
         if (insumoActual) {
           let cantidadASumar = Number(detalle.cantidad);
+          
+          // Aplicar redondeo también a la suma para prevenir problemas de precisión en las compras
+          let nuevoStockSuma = Number(insumoActual.cantidadActual) + cantidadASumar;
+          nuevoStockSuma = Math.round(nuevoStockSuma * 1000) / 1000;
 
           await prisma.insumo.update({
             where: { id: Number(detalle.insumoId) },
             data: { 
-              cantidadActual: { increment: cantidadASumar },
+              cantidadActual: nuevoStockSuma,
               costoCompra: Number(detalle.costoNeto), 
               costoUnitario: Number(detalle.precioUnitario) 
             }
