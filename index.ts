@@ -202,6 +202,7 @@ app.delete('/api/sistema/reset-ventas', async (req: Request, res: Response) => {
   }
 });
 
+// --- VENTAS: COBRAR Y DESCONTAR INVENTARIO AUTOMÁTICO ---
 app.post('/api/ventas', async (req: Request, res: Response) => {
   const { cliente, tipo, total, detalles } = req.body;
   try {
@@ -222,15 +223,26 @@ app.post('/api/ventas', async (req: Request, res: Response) => {
       if (detalle.productoId) { 
         const producto = await prisma.producto.findUnique({
           where: { id: Number(detalle.productoId) },
-          include: { ingredientes: true }
+          include: { ingredientes: { include: { insumo: true } } } // INCLUÍMOS EL INSUMO PARA LEER SU UNIDAD DE MEDIDA
         });
 
         if (producto && producto.ingredientes) {
           for (const ingrediente of producto.ingredientes) {
-            const cantidadGramosUsados = ingrediente.cantidad * Number(detalle.cantidad);
+            
+            // Cantidad bruta que pide la receta (ej. 150 gramos x 2 hamburguesas = 300)
+            let cantidadADescontar = ingrediente.cantidad * Number(detalle.cantidad);
+
+            // CORRECCIÓN: CONVERSIÓN DE INVENTARIO
+            // Si el insumo está guardado en "Kilos" o "Litros", convertimos los gramos/mililitros a Kilos/Litros
+            if (ingrediente.insumo) {
+                if (ingrediente.insumo.unidadMedida === 'Kilos' || ingrediente.insumo.unidadMedida === 'Litros') {
+                    cantidadADescontar = cantidadADescontar / 1000;
+                }
+            }
+
             await prisma.insumo.update({
               where: { id: ingrediente.insumoId },
-              data: { cantidadActual: { decrement: cantidadGramosUsados } }
+              data: { cantidadActual: { decrement: cantidadADescontar } }
             });
           }
         }
